@@ -10,9 +10,17 @@ Timotej Halenár - xhalen00
 #include <vector>
 #include "mpi.h"
 #include <map>
+#include <unordered_map>
 
 using namespace std;
 
+/**
+ * @brief Edge structure
+ * @param from - parent node
+ * @param to - child node
+ * @param forward - true if the edge is going down the tree, false if going up
+ * @param weight - weight of the edge, used for calculating the level of the node
+ */
 struct edge
 {
     char from;
@@ -28,45 +36,71 @@ struct edge
     }
 };
 
+/**
+ * @brief List element structure
+ * @param e - edge
+ * @param next - pointer to the next element in the list
+ * This structure is used to create an adjacency list for the tree
+ */
 struct list_el
 {
     edge e;
-    edge rev;
     list_el *next;
 };
 
+/**
+ * @brief NodeLevel structure
+ * @param node - node character
+ * @param level - level of the node
+ * This structure is used to store the level of each node in the tree
+ * and is used for the final output
+ */
 struct NodeLevel
 {
     char node;
     int level;
 };
 
+/**
+ * @brief Print edge
+ * @param e - edge to be printed
+ * This function is used for debugging
+ */
 void print_edge(edge e)
 {
     cout << "|" << e.from << "," << e.to << e.forward << "| ";
 }
 
+/**
+ * @brief Create adjacency list from tree
+ * @param tree - string representation of the tree
+ * @return adjacency list
+ * This function creates an adjacency list from the tree string representation
+ */
 map<char, list_el *> create_adj_list(const string &tree)
 {
+    // Create adjacency list
     map<char, list_el *> adj;
 
     for (int i = 0; i < tree.size(); ++i)
     {
+        // Initialize the adjacency list for each node
         char parent = tree[i];
         int left = 2 * i + 1;
         int right = 2 * i + 2;
 
+        // If left or right child is out of bounds, skip
         if (left < tree.size())
         {
             char child = tree[left];
 
-            edge forward_edge = {parent, child, true};
-            edge reverse_edge = {child, parent, false};
+            edge fw_edge = {parent, child, true};
+            edge rev_edge = {child, parent, false};
 
-            list_el *el1 = new list_el{forward_edge, reverse_edge, adj[parent]};
+            list_el *el1 = new list_el{fw_edge, adj[parent]};
             adj[parent] = el1;
 
-            list_el *el2 = new list_el{reverse_edge, forward_edge, adj[child]};
+            list_el *el2 = new list_el{rev_edge, adj[child]};
             adj[child] = el2;
         }
 
@@ -74,13 +108,13 @@ map<char, list_el *> create_adj_list(const string &tree)
         {
             char child = tree[right];
 
-            edge forward_edge = {parent, child, true};
-            edge reverse_edge = {child, parent, false};
+            edge fw_edge = {parent, child, true};
+            edge rev_edge = {child, parent, false};
 
-            list_el *el1 = new list_el{forward_edge, reverse_edge, adj[parent]};
+            list_el *el1 = new list_el{fw_edge, adj[parent]};
             adj[parent] = el1;
 
-            list_el *el2 = new list_el{reverse_edge, forward_edge, adj[child]};
+            list_el *el2 = new list_el{rev_edge, adj[child]};
             adj[child] = el2;
         }
     }
@@ -88,6 +122,13 @@ map<char, list_el *> create_adj_list(const string &tree)
     return adj;
 }
 
+/**
+ * @brief Find the next edge in the adjacency list
+ * @param adj - adjacency list
+ * @param e - edge to find
+ * @return pointer to the next edge in the list
+ * This function is used to find the next edge in the adjacency list
+ */
 list_el *find_next(map<char, list_el *> adj, edge e)
 {
     for (auto &[v, head] : adj)
@@ -102,30 +143,39 @@ list_el *find_next(map<char, list_el *> adj, edge e)
     return nullptr;
 }
 
+/**
+ * @brief Calculate the suffix sum of the euler tour
+ * @param etour - euler tour
+ * @param e - edge to find the suffix sum for
+ * @param size - size of the euler tour
+ * @return suffix sum of the euler tour
+ * This function is used to calculate the suffix sum of the euler tour
+ */
 int suffix_sum_etour(edge *etour, edge e, int size)
 {
-    bool found = false;
-
     int sum = 0;
 
-    for (int i = 0; i < size; i++)
+    for (int i = size - 1; i >= 0; i--)
     {
-        if (found)
-        {
-            if (etour[i].forward)
-                sum -= 1;
-            else
-                sum += 1;
-        }
+        if (etour[i].forward)
+            sum -= 1;
         else
-        {
-            if (etour[i] == e)
-                found = true;
-        }
+            sum += 1;
+
+        if (etour[i] == e)
+            break;
     }
     return sum;
 }
 
+/**
+ * @brief Get the index of the edge in the list
+ * @param edges - list of edges
+ * @param e - edge to find
+ * @param size - size of the list
+ * @return index of the edge in the list
+ * This function is used to get the index of the edge in the list
+ */
 int get_edge_ind(vector<list_el *> edges, edge e, int size)
 {
     for (int i = 0; i < size; i++)
@@ -137,14 +187,27 @@ int get_edge_ind(vector<list_el *> edges, edge e, int size)
     }
     return -1;
 }
+
+/**
+ * @brief Main function
+ * @param argc - number of arguments
+ * @param argv - arguments
+ * This function is used to initialize MPI and call the other functions
+ */
 int main(int argc, char *argv[])
 {
+    // Initialize MPI
     MPI_Init(&argc, &argv);
+
+    // *************************************************************
+    // Create custom MPI data type for edge structure
+    // *************************************************************
     MPI_Datatype MPI_EDGE;
     int lengths[4] = {1, 1, 1, 1};
     MPI_Aint displacements[4];
     MPI_Datatype types[4] = {MPI_CHAR, MPI_CHAR, MPI_CXX_BOOL, MPI_INT};
 
+    // Create a dummy edge to get the displacements
     edge dummy;
     MPI_Aint base;
     MPI_Get_address(&dummy, &base);
@@ -158,14 +221,21 @@ int main(int argc, char *argv[])
 
     MPI_Type_create_struct(4, lengths, displacements, types, &MPI_EDGE);
     MPI_Type_commit(&MPI_EDGE);
+    // *************************************************************
 
+    // Get rank, size
     int rank, size;
-    MPI_Status status;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    auto adj = create_adj_list(argv[1]);
+    string tree = argv[1];
+
+    // Create adjacency list
+    auto adj = create_adj_list(tree);
+
+    // Create list of edges
     vector<list_el *> edges;
+    // Create list of next edges of reverse edges
     vector<list_el *> next_erev;
     for (auto &[v, head] : adj)
     {
@@ -176,115 +246,114 @@ int main(int argc, char *argv[])
         }
     }
 
-    list_el *my_el = nullptr;
-    my_el = edges[rank];
+    // Assign the edges to the processes
+    list_el *my_el = edges[rank];
+
+    // Assign initial weight to the edge
+    // If the edge is going down the tree, assign -1, else assign 1
     if (my_el->e.forward)
         my_el->e.weight = -1;
     else
         my_el->e.weight = 1;
 
-    edge *etour = nullptr;
+    // Create list of next edges in euler tour
+    // This will be used to reconstruct the euler tour
+    edge *next_edges = nullptr;
 
+    // Allocate memory for the next edges in single process
     if (rank == 0)
     {
-        etour = new edge[size];
+        next_edges = new edge[size];
     }
 
-    edge my_etour;
+    // Get the next edge in each process (euler tour algorithm)
+    edge next_edge;
     if (next_erev[rank] != nullptr)
     {
-        my_etour = next_erev[rank]->e;
+        // If exists, get the next edge from the reverse edge
+        next_edge = next_erev[rank]->e;
     }
     else
     {
-        my_etour = adj[edges[rank]->e.to][0].e;
+        // Otherwise, get first edge from the adjacency list of node to which the edge is going
+        next_edge = adj[edges[rank]->e.to][0].e;
     }
 
-    MPI_Gather(&my_etour, 1, MPI_EDGE, etour, 1, MPI_EDGE, 0, MPI_COMM_WORLD);
-    // print numbers from one process
+    // Gather the next edges in each process
+    MPI_Gather(&next_edge, 1, MPI_EDGE, next_edges, 1, MPI_EDGE, 0, MPI_COMM_WORLD);
 
-    edge *proper_etour;
-    proper_etour = new edge[size];
+    // Create euler tour
+    edge *etour;
+    // Allocate memory in every process, because they will all need it
+    etour = new edge[size];
+
+    // Reconstruct euler tour in single process
     if (rank == 0)
     {
-        // all threads need this
-
+        // Current edge is the first edge in the euler tour
         edge cur = edges[0]->e;
         int ind = 0;
         for (int i = 0; i < size; i++)
         {
-            // print_edge(cur);
-            proper_etour[i] = cur;
-            cur = etour[ind];
+            etour[i] = cur;
+            cur = next_edges[ind];
             ind = get_edge_ind(edges, cur, size);
         }
-
-        /* cout << "testing suffix sum" << endl;
-        print_edge(edges[3]->e);
-        int w = suffix_sum_etour(proper_etour, edges[3]->e, size);
-        cout << "sum: " << w << endl; */
-        /* for (int i = 0; i < size; i++)
-        {
-
-            cout << i << ": ";
-            cout << "my edge: ";
-            print_edge(edges[i]->e);
-            cout << "my etour: ";
-            print_edge(etour[i]);
-            cout << endl;
-            // cout << ": edge (" << etour[i].from << "," << etour[i].to << ")" << endl;
-        }
-        printf("\n"); */
     }
-    MPI_Bcast(proper_etour, size, MPI_EDGE, 0, MPI_COMM_WORLD);
 
-    int w = suffix_sum_etour(proper_etour, my_el->e, size);
-    /* cout << "sum " << rank << ": ";
-    print_edge(my_el->e);
-    cout << w << endl; */
+    // Broadcast the euler tour to all processes
+    MPI_Bcast(etour, size, MPI_EDGE, 0, MPI_COMM_WORLD);
 
+    // Calculate the suffix sum of the euler tour for each edge
+    int weight = suffix_sum_etour(etour, my_el->e, size);
+
+    // Create a struct to store the node and its level
     NodeLevel my_node_level;
 
+    // Create a list of all node levels
+    // Allocate memory in single process
     NodeLevel *all_node_levels = nullptr;
     if (rank == 0)
     {
         all_node_levels = new NodeLevel[size];
     }
 
+    // Only assign weight to the node if the edge is forward
     if (my_el->e.forward)
     {
-        my_node_level = {my_el->e.to, w};
+        my_node_level = {my_el->e.to, weight + 1};
     }
 
+    // Gather all the node levels
     MPI_Gather(&my_node_level, sizeof(NodeLevel), MPI_BYTE,
                all_node_levels, sizeof(NodeLevel), MPI_BYTE,
                0, MPI_COMM_WORLD);
 
+    // Print the node levels in single process
     if (rank == 0)
     {
-        // Use a map to store the levels of each node
+        // Create a map to store the node levels
+        // This is used to print the node levels in the order of the tree
         map<char, int> node_levels;
         for (int i = 0; i < size; i++)
         {
             node_levels[all_node_levels[i].node] = all_node_levels[i].level;
         }
 
-        // Print the levels in the order of the input string
-        // cout << "Node levels in order:" << endl;
-        std::string tree_string = argv[1];
-        for (int i = 0; i < tree_string.size(); ++i) // Assuming argv[1] contains the input tree string
+        for (int i = 0; i < tree.size(); ++i)
         {
-            cout << tree_string[i] << ":" << node_levels[tree_string[i]];
-            if (i != tree_string.size() - 1) // Check if it's not the last node
+            cout << tree[i] << ":" << node_levels[tree[i]];
+            if (i != tree.size() - 1)
             {
                 cout << ",";
             }
         }
         cout << endl;
 
-        delete[] all_node_levels; // Free memory
+        delete[] all_node_levels;
     }
 
+    // Free the custom MPI data type
     MPI_Type_free(&MPI_EDGE);
     MPI_Finalize();
 }

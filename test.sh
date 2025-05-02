@@ -21,7 +21,9 @@ if [ $proc -eq 0 ]; then
 fi;
 
 # preklad
-mpic++ --prefix /usr/local/share/OpenMPI -o vuv vuv.cpp
+mpic++ --prefix /usr/local/share/OpenMPI -g -o vuv vuv.cpp
+
+# valgrind --leak-check=full --show-leak-kinds=all ./
 
 # spusteni aplikace (oversubscribe - vice procesu nez fyzicky k dispozici)
 mpirun --oversubscribe --prefix /usr/local/share/OpenMPI -np $proc vuv "$1"
