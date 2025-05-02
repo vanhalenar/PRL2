@@ -10,11 +10,14 @@ if [ $# -ne 1 ]; then
   exit 1;
 fi;
 
-# pocet procesu == 0, nema cenu pokracovat
-proc=$((${#1}*2-2))
 
+proc=$((${#1}*2-2))
+# proc=1
+
+# pocet procesu == 0, nema cenu pokracovat
 if [ $proc -eq 0 ]; then
-  exit 2;
+  echo "${1}: 0"
+  exit 0;
 fi;
 
 # preklad
