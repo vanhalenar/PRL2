@@ -151,11 +151,11 @@ list_el *find_next(map<char, list_el *> adj, edge e)
  * @return suffix sum of the euler tour
  * This function is used to calculate the suffix sum of the euler tour
  */
-int suffix_sum_etour(edge *etour, edge e, int size)
+int suffix_sum_etour(vector<edge> etour, edge e)
 {
     int sum = 0;
 
-    for (int i = size - 1; i >= 0; i--)
+    for (int i = etour.size() - 1; i >= 0; i--)
     {
         if (etour[i].forward)
             sum -= 1;
@@ -258,13 +258,7 @@ int main(int argc, char *argv[])
 
     // Create list of next edges in euler tour
     // This will be used to reconstruct the euler tour
-    edge *next_edges = nullptr;
-
-    // Allocate memory for the next edges in single process
-    if (rank == 0)
-    {
-        next_edges = new edge[size];
-    }
+    vector<edge> next_edges(size);
 
     // Get the next edge in each process (euler tour algorithm)
     edge next_edge;
@@ -280,12 +274,10 @@ int main(int argc, char *argv[])
     }
 
     // Gather the next edges in each process
-    MPI_Gather(&next_edge, 1, MPI_EDGE, next_edges, 1, MPI_EDGE, 0, MPI_COMM_WORLD);
+    MPI_Gather(&next_edge, 1, MPI_EDGE, next_edges.data(), 1, MPI_EDGE, 0, MPI_COMM_WORLD);
 
     // Create euler tour
-    edge *etour;
-    // Allocate memory in every process, because they will all need it
-    etour = new edge[size];
+    vector<edge> etour(size);
 
     // Reconstruct euler tour in single process
     if (rank == 0)
@@ -302,21 +294,16 @@ int main(int argc, char *argv[])
     }
 
     // Broadcast the euler tour to all processes
-    MPI_Bcast(etour, size, MPI_EDGE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(etour.data(), size, MPI_EDGE, 0, MPI_COMM_WORLD);
 
     // Calculate the suffix sum of the euler tour for each edge
-    int weight = suffix_sum_etour(etour, my_el->e, size);
+    int weight = suffix_sum_etour(etour, my_el->e);
 
     // Create a struct to store the node and its level
     NodeLevel my_node_level;
 
     // Create a list of all node levels
-    // Allocate memory in single process
-    NodeLevel *all_node_levels = nullptr;
-    if (rank == 0)
-    {
-        all_node_levels = new NodeLevel[size];
-    }
+    vector<NodeLevel> all_node_levels(size);
 
     // Only assign weight to the node if the edge is forward
     if (my_el->e.forward)
@@ -326,7 +313,7 @@ int main(int argc, char *argv[])
 
     // Gather all the node levels
     MPI_Gather(&my_node_level, sizeof(NodeLevel), MPI_BYTE,
-               all_node_levels, sizeof(NodeLevel), MPI_BYTE,
+               all_node_levels.data(), sizeof(NodeLevel), MPI_BYTE,
                0, MPI_COMM_WORLD);
 
     // Print the node levels in single process
@@ -349,8 +336,6 @@ int main(int argc, char *argv[])
             }
         }
         cout << endl;
-
-        delete[] all_node_levels;
     }
 
     // Free the custom MPI data type
