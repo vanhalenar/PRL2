@@ -52,8 +52,7 @@ struct list_el
  * @brief NodeLevel structure
  * @param node - node character
  * @param level - level of the node
- * This structure is used to store the level of each node in the tree
- * and is used for the final output
+ * This structure is used to store the level of each node in the tree, and it's used for the final output
  */
 struct NodeLevel
 {
@@ -72,57 +71,6 @@ void print_edge(edge e)
 }
 
 /**
- * @brief Create adjacency list from tree
- * @param tree - string representation of the tree
- * @return adjacency list
- * This function creates an adjacency list from the tree string representation
- */
-map<char, list_el *> create_adj_list(const string &tree)
-{
-    // Create adjacency list
-    map<char, list_el *> adj;
-
-    for (int i = 0; i < tree.size(); ++i)
-    {
-        // Initialize the adjacency list for each node
-        char parent = tree[i];
-        int left = 2 * i + 1;
-        int right = 2 * i + 2;
-
-        // If left or right child is out of bounds, skip
-        if (left < tree.size())
-        {
-            char child = tree[left];
-
-            edge fw_edge = {parent, child, true};
-            edge rev_edge = {child, parent, false};
-
-            list_el *el1 = new list_el{fw_edge, adj[parent]};
-            adj[parent] = el1;
-
-            list_el *el2 = new list_el{rev_edge, adj[child]};
-            adj[child] = el2;
-        }
-
-        if (right < tree.size())
-        {
-            char child = tree[right];
-
-            edge fw_edge = {parent, child, true};
-            edge rev_edge = {child, parent, false};
-
-            list_el *el1 = new list_el{fw_edge, adj[parent]};
-            adj[parent] = el1;
-
-            list_el *el2 = new list_el{rev_edge, adj[child]};
-            adj[child] = el2;
-        }
-    }
-
-    return adj;
-}
-
-/**
  * @brief Find the next edge in the adjacency list
  * @param adj - adjacency list
  * @param e - edge to find
@@ -136,11 +84,73 @@ list_el *find_next(map<char, list_el *> adj, edge e)
         for (list_el *p = head; p != nullptr; p = p->next)
         {
             if (p->e == e)
+            {
                 return p->next;
+            }
         }
     }
 
     return nullptr;
+}
+
+/**
+ * @brief Create adjacency list from tree
+ * @param tree - string representation of the tree
+ * @return adjacency list
+ * This function creates an adjacency list from the tree string representation
+ */
+map<char, list_el *> create_adj_list(const string &tree, vector<list_el *> *edges, vector<list_el *> *next_erev)
+{
+    // Create adjacency list
+    map<char, list_el *> adj;
+
+    for (int i = 0; i < tree.size(); ++i)
+    {
+        // Initialize the adjacency list for each node
+        char parent = tree[i];
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+
+        // If left or right child is out of bounds, skip
+        // I know that this is really ugly and there's probably a better way, but I don't have it in me to rework it :(
+        if (left < tree.size())
+        {
+            char child = tree[left];
+
+            edge fw_edge = {parent, child, true};
+
+            edge rev_edge = {child, parent, false};
+
+            list_el *el1 = new list_el{fw_edge, adj[parent]};
+            adj[parent] = el1;
+            edges->push_back(el1);
+            next_erev->push_back(find_next(adj, {fw_edge.to, fw_edge.from, !fw_edge.forward}));
+            list_el *el2 = new list_el{rev_edge, adj[child]};
+            adj[child] = el2;
+            edges->push_back(el2);
+            next_erev->push_back(find_next(adj, {rev_edge.to, rev_edge.from, !rev_edge.forward}));
+        }
+
+        if (right < tree.size())
+        {
+            char child = tree[right];
+
+            edge fw_edge = {parent, child, true};
+
+            edge rev_edge = {child, parent, false};
+
+            list_el *el1 = new list_el{fw_edge, adj[parent]};
+            adj[parent] = el1;
+            edges->push_back(el1);
+            next_erev->push_back(find_next(adj, {fw_edge.to, fw_edge.from, !fw_edge.forward}));
+            list_el *el2 = new list_el{rev_edge, adj[child]};
+            adj[child] = el2;
+            edges->push_back(el2);
+            next_erev->push_back(find_next(adj, {rev_edge.to, rev_edge.from, !rev_edge.forward}));
+        }
+    }
+
+    return adj;
 }
 
 /**
@@ -185,6 +195,7 @@ int get_edge_ind(vector<list_el *> edges, edge e, int size)
             return i;
         }
     }
+
     return -1;
 }
 
@@ -231,20 +242,11 @@ int main(int argc, char *argv[])
     string tree = argv[1];
 
     // Create adjacency list
-    auto adj = create_adj_list(tree);
-
     // Create list of edges
-    vector<list_el *> edges;
     // Create list of next edges of reverse edges
+    vector<list_el *> edges;
     vector<list_el *> next_erev;
-    for (auto &[v, head] : adj)
-    {
-        for (list_el *p = head; p != nullptr; p = p->next)
-        {
-            edges.push_back(p);
-            next_erev.push_back(find_next(adj, {p->e.to, p->e.from, !p->e.forward}));
-        }
-    }
+    auto adj = create_adj_list(tree, &edges, &next_erev);
 
     // Assign the edges to the processes
     list_el *my_el = edges[rank];
@@ -284,7 +286,9 @@ int main(int argc, char *argv[])
     {
         // Current edge is the first edge in the euler tour
         edge cur = edges[0]->e;
+
         int ind = 0;
+
         for (int i = 0; i < size; i++)
         {
             etour[i] = cur;
