@@ -96,6 +96,8 @@ list_el *find_next(map<char, list_el *> adj, edge e)
 /**
  * @brief Create adjacency list from tree
  * @param tree - string representation of the tree
+ * @param edges - vector of all edges (output param)
+ * @param next_erev - vector of next edges of reverse edges (output param)
  * @return adjacency list
  * This function creates an adjacency list from the tree string representation
  */
