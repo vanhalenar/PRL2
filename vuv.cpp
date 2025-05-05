@@ -1,8 +1,10 @@
-/*
-VUT FIT - PRL projekt 2
-Timotej Halenár - xhalen00
-29.4.2024
-*/
+/**
+ * @file vuv.cpp
+ * @brief Binary tree node level calculator
+ * @details VUT FIT - PRL projekt 2
+ * @author Timotej Halenár - xhalen00
+ * @date 5.5.2024
+ */
 
 #include <stdio.h>
 #include <iostream>
@@ -79,9 +81,11 @@ void print_edge(edge e)
  */
 list_el *find_next(map<char, list_el *> adj, edge e)
 {
-    for (auto &[v, head] : adj)
+    for (auto i : adj)
     {
-        for (list_el *p = head; p != nullptr; p = p->next)
+        list_el *el = i.second;
+
+        for (list_el *p = el; p != nullptr; p = p->next)
         {
             if (p->e == e)
             {
@@ -214,25 +218,19 @@ int main(int argc, char *argv[])
 
     // *************************************************************
     // Create custom MPI data type for edge structure
+    // Source: https://kindatechnical.com/parallel-computing-mpi/custom-mpi-data-types.html
     // *************************************************************
     MPI_Datatype MPI_EDGE;
     int lengths[4] = {1, 1, 1, 1};
-    MPI_Aint displacements[4];
+    MPI_Aint offsets[4];
     MPI_Datatype types[4] = {MPI_CHAR, MPI_CHAR, MPI_CXX_BOOL, MPI_INT};
 
-    // Create a dummy edge to get the displacements
-    edge dummy;
-    MPI_Aint base;
-    MPI_Get_address(&dummy, &base);
-    MPI_Get_address(&dummy.from, &displacements[0]);
-    MPI_Get_address(&dummy.to, &displacements[1]);
-    MPI_Get_address(&dummy.forward, &displacements[2]);
-    MPI_Get_address(&dummy.weight, &displacements[3]);
+    offsets[0] = offsetof(edge, from);
+    offsets[1] = offsetof(edge, to);
+    offsets[2] = offsetof(edge, forward);
+    offsets[3] = offsetof(edge, weight);
 
-    for (int i = 0; i < 4; ++i)
-        displacements[i] -= base;
-
-    MPI_Type_create_struct(4, lengths, displacements, types, &MPI_EDGE);
+    MPI_Type_create_struct(4, lengths, offsets, types, &MPI_EDGE);
     MPI_Type_commit(&MPI_EDGE);
     // *************************************************************
 
@@ -280,21 +278,25 @@ int main(int argc, char *argv[])
     // Gather the next edges in each process
     MPI_Gather(&next_edge, 1, MPI_EDGE, next_edges.data(), 1, MPI_EDGE, 0, MPI_COMM_WORLD);
 
-    // Create euler tour
+    // Create euler tour vector
     vector<edge> etour(size);
 
-    // Reconstruct euler tour in single process
+    // Reconstruct euler tour in single process, this will be broadcasted later
     if (rank == 0)
     {
-        // Current edge is the first edge in the euler tour
         edge cur = edges[0]->e;
 
+        // Helper variable for indexing next_edges
         int ind = 0;
 
+        // This thing is probably needlessly complicated, but it works
         for (int i = 0; i < size; i++)
         {
+            // add current edge as next member of etour
             etour[i] = cur;
+            // take the next edge from next_edges
             cur = next_edges[ind];
+            // calculate index for next iteration
             ind = get_edge_ind(edges, cur, size);
         }
     }
@@ -325,23 +327,38 @@ int main(int argc, char *argv[])
     // Print the node levels in single process
     if (rank == 0)
     {
-        // Create a map to store the node levels
-        // This is used to print the node levels in the order of the tree
+        // Create a map to store the node levels in order to print them in order of the tree
         map<char, int> node_levels;
         for (int i = 0; i < size; i++)
         {
             node_levels[all_node_levels[i].node] = all_node_levels[i].level;
         }
 
+        // Print in the specified format
         for (int i = 0; i < tree.size(); ++i)
         {
             cout << tree[i] << ":" << node_levels[tree[i]];
+            // Do not print comma if on last element
             if (i != tree.size() - 1)
             {
                 cout << ",";
             }
         }
         cout << endl;
+    }
+
+    // Free memory from adjacency list
+    // It's still leaking somewhere though
+    for (auto i : adj)
+    {
+        list_el *el = i.second;
+
+        while (el != nullptr)
+        {
+            list_el *next = el->next;
+            delete el;
+            el = next;
+        }
     }
 
     // Free the custom MPI data type
